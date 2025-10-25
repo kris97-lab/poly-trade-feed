@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { sdk } from "@farcaster/miniapp-sdk"; // ✅ официальный Farcaster SDK — установлен
+import { sdk } from "@farcaster/miniapp-sdk";
 
 type Trade = {
   id: string;
@@ -15,6 +15,13 @@ type Trade = {
   url?: string;
 };
 
+type User = {
+  fid: number;
+  username: string;
+  displayName: string;
+  pfpUrl?: string;
+};
+
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 export default function MiniPage() {
@@ -22,19 +29,37 @@ export default function MiniPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
-  // ✅ Farcaster Mini App splash screen fix
+  /* -------------------------------------------------
+   *  1. SDK ready + пользователь
+   * ------------------------------------------------- */
   useEffect(() => {
     (async () => {
       try {
-        await sdk.actions.ready(); // ✅ официально правильный вызов
+        await sdk.actions.ready();
+
+        // <-- правильный способ получить профиль
+        const userData = await sdk.actions.getUserData();
+        if (userData) {
+          setUser({
+            fid: userData.fid,
+            username: userData.username,
+            displayName: userData.displayName || userData.username,
+            pfpUrl: userData.pfpUrl,
+          });
+        }
       } catch (err) {
-        console.warn("sdk.actions.ready() failed (fallback next refresh)", err);
+        console.warn("Failed to load user data", err);
+      } finally {
+        setTimeout(() => setMountedFade(true), 20);
       }
-      setTimeout(() => setMountedFade(true), 20);
     })();
   }, []);
 
+  /* -------------------------------------------------
+   *  2. Загрузка трейдов
+   * ------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
     const pull = async () => {
@@ -43,10 +68,12 @@ export default function MiniPage() {
         if (!r.ok) throw new Error("Failed to load trades");
         const data: Trade[] = await r.json();
         if (!mounted) return;
+
         const filtered = data
           .filter((t) => (t.amountUSD ?? 0) >= 800)
           .sort((a, b) => +new Date(b.ts) - +new Date(a.ts))
           .slice(0, 150);
+
         setTrades(filtered);
         setUpdatedAt(new Date());
         setLoading(false);
@@ -71,17 +98,46 @@ export default function MiniPage() {
     >
       <div className="w-full max-w-4xl">
         <div className="mx-auto max-w-3xl rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)]">
-          {/* Header */}
-          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)]">
-            <h1 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
-              Polymarket Trade Radar
-            </h1>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">
-              {updatedAt ? `Updated: ${format(updatedAt, "HH:mm:ss")}` : "— — : — — : — —"}
+          {/* ==================== HEADER ==================== */}
+          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex items-center justify-between">
+            <div>
+              <h1 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
+                Polymarket Trade Radar
+              </h1>
+              <div className="mt-1 text-[11px] text-[var(--muted)]">
+                {updatedAt
+                  ? `Updated: ${format(updatedAt, "HH:mm:ss")}`
+                  : "— — : — — : — —"}
+              </div>
             </div>
+
+            {/* ---- Аватар пользователя ---- */}
+            {user ? (
+              <button
+                onClick={() =>
+                  sdk.actions.openLink(`https://warpcast.com/~${user.username}`)
+                }
+                className="hover:opacity-80 transition-opacity"
+                title={`@${user.username}`}
+              >
+                {user.pfpUrl ? (
+                  <img
+                    src={user.pfpUrl}
+                    alt={user.displayName}
+                    className="w-8 h-8 rounded-full object-cover border border-[var(--line)]"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                    {user.displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </button>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[var(--line)]/30 animate-pulse" />
+            )}
           </header>
 
-          {/* Trades Feed */}
+          {/* ==================== FEED ==================== */}
           <div className="max-h-[70vh] overflow-auto bg-[var(--card)]">
             {loading ? (
               <SkeletonRows />
@@ -103,35 +159,37 @@ export default function MiniPage() {
   );
 }
 
+/* -------------------------------------------------
+ *  Row – жёлтое выделение > 10 000 USD
+ * ------------------------------------------------- */
 function Row({ t }: { t: Trade }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
   const sideColor = t.side === "BUY" ? "text-emerald-300" : "text-red-300";
+  const isLargeTrade = t.amountUSD > 10_000;
 
-  // Условие для крупной сделки
-  const isLargeTrade = t.amountUSD > 10000;
+  const rowStyle = isLargeTrade
+    ? {
+        backgroundColor: "rgba(255, 235, 59, 0.2)",
+        borderLeft: "4px solid #ffeb3b",
+        transition: "background-color 0.1s ease",
+      }
+    : { transition: "background-color 0.1s ease" };
 
-  // Inline-стили для жёлтого выделения (не зависит от Tailwind)
-  const rowStyle = isLargeTrade 
-    ? { 
-        backgroundColor: 'rgba(255, 235, 59, 0.2)',  // Жёлтый фон 20% opacity
-        borderLeft: '4px solid #ffeb3b',             // Жёлтая полоска слева
-        transition: 'background-color 0.1s ease'      // Плавный hover
-      } 
-    : { 
-        transition: 'background-color 0.1s ease' 
-      };
-
-  // Hover-эффект через CSS (добавь в глобальные стили или здесь)
-  const hoverStyle = isLargeTrade 
-    ? { backgroundColor: 'rgba(255, 235, 59, 0.3)' } 
-    : { backgroundColor: 'rgba(255, 255, 255, 0.05)' };
+  const hoverStyle = isLargeTrade
+    ? { backgroundColor: "rgba(255, 235, 59, 0.3)" }
+    : { backgroundColor: "rgba(255, 255, 255, 0.05)" };
 
   return (
-    <div 
+    <div
       className="px-4 py-2 text-[13px] font-mono text-emerald-200/90"
       style={rowStyle}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = hoverStyle.backgroundColor; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = rowStyle.backgroundColor ?? ''; }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = hoverStyle.backgroundColor)
+      }
+      onMouseLeave={(e) =>
+        (e.currentTarget.style.backgroundColor =
+          rowStyle.backgroundColor ?? "")
+      }
     >
       <span className="text-emerald-300">[{time}]</span>{" "}
       <span className={`${sideColor} font-semibold`}>{t.side}</span>{" "}
@@ -158,11 +216,17 @@ function Row({ t }: { t: Trade }) {
   );
 }
 
+/* -------------------------------------------------
+ *  Skeleton
+ * ------------------------------------------------- */
 function SkeletonRows() {
   return (
     <div className="p-4 space-y-2">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="h-5 bg-[var(--line)]/50 animate-pulse rounded" />
+        <div
+          key={i}
+          className="h-5 bg-[var(--line)]/50 animate-pulse rounded"
+        />
       ))}
     </div>
   );
