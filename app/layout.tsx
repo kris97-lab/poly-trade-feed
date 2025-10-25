@@ -33,12 +33,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <RootProvider>
       <html lang="en">
-        <body className={`${inter.variable} ${sourceCodePro.variable} ${playfair.variable} bg-[var(--bg)] min-h-screen`}
->
-  <SafeArea>{children}</SafeArea>
-</body>
-
+        <body
+          className={`${inter.variable} ${sourceCodePro.variable} ${playfair.variable} bg-[var(--bg)]`}
+        >
+          {/* ✅ ВАЖНО: оборачиваем SafeArea в полноэкранный div */}
+          <div className="min-h-screen w-full">
+            <SafeArea>{children}</SafeArea>
+          </div>
+        </body>
       </html>
     </RootProvider>
   );
 }
+
