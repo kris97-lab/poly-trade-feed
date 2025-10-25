@@ -5,6 +5,9 @@ import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
 import Image from "next/image";
 
+/* -------------------------------------------------
+ *  Типы
+ * ------------------------------------------------- */
 type Trade = {
   id: string;
   ts: string;
@@ -16,21 +19,29 @@ type Trade = {
   url?: string;
 };
 
-type User = {
+type FarcasterUser = {
   fid: number;
   username: string;
-  displayName: string;
-  pfpUrl?: string;
+  displayName?: string;
+  pfp?: { url?: string };
 };
 
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
+/* -------------------------------------------------
+ *  Компонент
+ * ------------------------------------------------- */
 export default function MiniPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{
+    fid: number;
+    username: string;
+    displayName: string;
+    pfpUrl?: string;
+  } | null>(null);
 
   /* -------------------------------------------------
    *  1. SDK ready + пользователь
@@ -40,14 +51,15 @@ export default function MiniPage() {
       try {
         await sdk.actions.ready();
 
-        // @ts-ignore – типы SDK не содержат user.get(), но метод реально существует
-        const userData = await (sdk as any).user?.get?.();
+        const userData: FarcasterUser | undefined = await (sdk as unknown as {
+          user?: { get?: () => Promise<FarcasterUser | undefined> };
+        }).user?.get?.();
 
         if (userData) {
           setUser({
             fid: userData.fid,
             username: userData.username,
-            displayName: userData.displayName || userData.username,
+            displayName: userData.displayName ?? userData.username,
             pfpUrl: userData.pfp?.url,
           });
         }
@@ -117,7 +129,6 @@ export default function MiniPage() {
             {user ? (
               <button
                 onClick={() =>
-                  // Правильное имя: openUrl (не openLink)
                   sdk.actions.openUrl(`https://warpcast.com/~${user.username}`)
                 }
                 className="hover:opacity-80 transition-opacity"
@@ -130,7 +141,7 @@ export default function MiniPage() {
                     width={32}
                     height={32}
                     className="w-8 h-8 rounded-full object-cover border border-[var(--line)]"
-                    unoptimized // внешние аватары Farcaster → отключаем оптимизацию
+                    unoptimized
                   />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
