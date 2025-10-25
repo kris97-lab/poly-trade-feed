@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { sdk } from "@coinbase/onchainkit/minikit"; // ✅ критично для Farcaster
+import { actions } from "@coinbase/onchainkit/minikit"; // ✅ правильный импорт
 
 type Trade = {
   id: string;
@@ -25,7 +25,7 @@ export default function MiniPage() {
 
   // ✅ Farcaster splash fix
   useEffect(() => {
-    sdk.actions.ready();
+    actions.ready(); // <--- ИСПРАВЛЕНО
     setTimeout(() => setMountedFade(true), 20); // soft fade-in
   }, []);
 
