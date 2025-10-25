@@ -23,14 +23,15 @@ export default function MiniPage() {
   const [mountedFade, setMountedFade] = useState(false); // ✅ fade-in
 
   // ✅ UNIVERSAL Farcaster splash fix — работает на любой версии onchainkit
+    // ✅ UNIVERSAL Farcaster splash fix — works everywhere
   useEffect(() => {
     try {
       window.parent.postMessage(
-        { type: "onchainkit_sdk_ready" },
+        { type: "onchainkit_ready" }, // ← исправил
         "*"
       );
     } catch {}
-    setTimeout(() => setMountedFade(true), 20); // мягкий fade-in
+    setTimeout(() => setMountedFade(true), 20);
   }, []);
 
   useEffect(() => {
