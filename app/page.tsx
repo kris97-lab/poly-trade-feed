@@ -107,15 +107,31 @@ function Row({ t }: { t: Trade }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
   const sideColor = t.side === "BUY" ? "text-emerald-300" : "text-red-300";
 
-  // Условие: если сумма > 10000 USD — жёлтый фон
+  // Условие для крупной сделки
   const isLargeTrade = t.amountUSD > 10000;
-  const rowBgClass = isLargeTrade
-    ? "bg-yellow-500/20 hover:bg-yellow-500/30 border-l-4 border-yellow-400"
-    : "hover:bg-white/3";
+
+  // Inline-стили для жёлтого выделения (не зависит от Tailwind)
+  const rowStyle = isLargeTrade 
+    ? { 
+        backgroundColor: 'rgba(255, 235, 59, 0.2)',  // Жёлтый фон 20% opacity
+        borderLeft: '4px solid #ffeb3b',             // Жёлтая полоска слева
+        transition: 'background-color 0.1s ease'      // Плавный hover
+      } 
+    : { 
+        transition: 'background-color 0.1s ease' 
+      };
+
+  // Hover-эффект через CSS (добавь в глобальные стили или здесь)
+  const hoverStyle = isLargeTrade 
+    ? { backgroundColor: 'rgba(255, 235, 59, 0.3)' } 
+    : { backgroundColor: 'rgba(255, 255, 255, 0.05)' };
 
   return (
-    <div
-      className={`px-4 py-2 text-[13px] font-mono text-emerald-200/90 transition-colors duration-100 ${rowBgClass}`}
+    <div 
+      className="px-4 py-2 text-[13px] font-mono text-emerald-200/90"
+      style={rowStyle}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = hoverStyle.backgroundColor; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = rowStyle.backgroundColor ?? ''; }}
     >
       <span className="text-emerald-300">[{time}]</span>{" "}
       <span className={`${sideColor} font-semibold`}>{t.side}</span>{" "}
