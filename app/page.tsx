@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { sdk } from "@farcaster/miniapp-sdk"; // ✅ официальный Farcaster SDK — установлен
 
 type Trade = {
   id: string;
@@ -20,18 +21,18 @@ export default function MiniPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mountedFade, setMountedFade] = useState(false); // ✅ fade-in
+  const [mountedFade, setMountedFade] = useState(false);
 
-  // ✅ UNIVERSAL Farcaster splash fix — работает на любой версии onchainkit
-    // ✅ UNIVERSAL Farcaster splash fix — works everywhere
+  // ✅ Farcaster Mini App splash screen fix
   useEffect(() => {
-    try {
-      window.parent.postMessage(
-        { type: "onchainkit_ready" }, // ← исправил
-        "*"
-      );
-    } catch {}
-    setTimeout(() => setMountedFade(true), 20);
+    (async () => {
+      try {
+        await sdk.actions.ready(); // ✅ официально правильный вызов
+      } catch (err) {
+        console.warn("sdk.actions.ready() failed (fallback next refresh)", err);
+      }
+      setTimeout(() => setMountedFade(true), 20);
+    })();
   }, []);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function MiniPage() {
         if (mounted) setLoading(false);
       }
     };
+
     pull();
     const id = setInterval(pull, 10_000);
     return () => {
