@@ -29,7 +29,9 @@ export const minikitConfig = {
       ownerAddress: "0xcDB9F067149CA2c8bAe31fD7F5fDCF417deeC7eB"
     },
 
-    // SEO / OG
+        // SEO / OG
     ogTitle: "Polymarket Trade Feed",
     ogDescription: "Farcaster Mini App — real-time feed of >$800 trades on Polymarket",
-    ogImageUrl: `${ROOT_URL}/blu_
+    ogImageUrl: `${ROOT_URL}/blue-hero.png`,
+  }
+} as const;
