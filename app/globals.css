@@ -1,13 +1,16 @@
 @layer base {
   :root {
-    /* ✅ FINAL FANTASY / TERMINAL color tokens */
-    --bg: #0b0b0b;             /* базовый фон */
-    --ink: #e9e6df;            /* off-white основной текст */
-    --muted: #b9b7ae;          /* вторичный / нейтральный */
-    --line: #171717;           /* границы / разделители */
+    /* ✅ Warm Arcane FFT / Tactical UI palette */
+    --bg: #0b0b0b;           /* тёмный фон сцены */
+    --panel: #0e0e0d;        /* фон основной панели (не такой плоский как bg) */
+    --card: #111110;         /* внутренний слой, чуть теплее/paper-like */
+    --line: #1a1a18;         /* разделители, деликатно тёплые */
+    --ink: #ecebe7;          /* основной текст — не чисто белый, мягкий */
+    --muted: #b9b7ae;        /* вторичный текст / подписи */
+    --gold: #e7d9a8;         /* для баннера / FFT-подсветка */
+    --banner: linear-gradient(180deg, #151411 0%, #0f0e0c 100%);
   }
 
-  /* ↓ этот блок можно оставить как есть (Next default reset) */
   html,
   body {
     max-width: 100vw;
@@ -26,5 +29,18 @@
   a {
     color: inherit;
     text-decoration: none;
+  }
+
+  /* ✅ Опционально: ultra subtle noise layer for arcane texture */
+  @supports (backdrop-filter: blur(0)) {
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: radial-gradient(#ffffff 1px, transparent 1px);
+      background-size: 3px 3px;
+    }
   }
 }
