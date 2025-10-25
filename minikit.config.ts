@@ -7,9 +7,9 @@ const ROOT_URL =
 
 export const minikitConfig = {
   accountAssociation: {
-    header: "",     // добавим после генерации на base.org/build
-    payload: "",    // добавим после генерации
-    signature: ""   // добавим после генерации
+    header: "",      // ← вставим после генерации в Base Build
+    payload: "",     // ← вставим после генерации
+    signature: ""    // ← вставим после генерации
   },
   miniapp: {
     version: "1",
@@ -24,14 +24,12 @@ export const minikitConfig = {
     primaryCategory: "finance",
     tags: ["polymarket", "trading", "terminal", "onchain", "realtime"],
 
-    // Base Builder ownership verification
     baseBuilder: {
       ownerAddress: "0xcDB9F067149CA2c8bAe31fD7F5fDCF417deeC7eB"
     },
 
-        // SEO / OG
     ogTitle: "Polymarket Trade Feed",
     ogDescription: "Farcaster Mini App — real-time feed of >$800 trades on Polymarket",
-    ogImageUrl: `${ROOT_URL}/blue-hero.png`,
+    ogImageUrl: `${ROOT_URL}/blue-hero.png`
   }
 } as const;
