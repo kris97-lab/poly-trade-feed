@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
 import Image from "next/image";
+import Link from "next/link";
 
 /* -------------------------------------------------
  *  Типы
@@ -29,7 +30,7 @@ type FarcasterUser = {
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 /* -------------------------------------------------
- *  Компонент
+ *  Главная страница
  * ------------------------------------------------- */
 export default function MiniPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -42,6 +43,8 @@ export default function MiniPage() {
     displayName: string;
     pfpUrl?: string;
   } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [walletConnected, setWalletConnected] = useState(false);
 
   /* -------------------------------------------------
    *  1. SDK ready + пользователь
@@ -51,9 +54,9 @@ export default function MiniPage() {
       try {
         await sdk.actions.ready();
 
-        const userData: FarcasterUser | undefined = await (sdk as unknown as {
-          user?: { get?: () => Promise<FarcasterUser | undefined> };
-        }).user?.get?.();
+        const userData: FarcasterUser | undefined = await (
+          sdk as unknown as { user?: { get?: () => Promise<FarcasterUser | undefined> } }
+        ).user?.get?.();
 
         if (userData) {
           setUser({
@@ -62,9 +65,10 @@ export default function MiniPage() {
             displayName: userData.displayName ?? userData.username,
             pfpUrl: userData.pfp?.url,
           });
+          setWalletConnected(true);
         }
       } catch (err) {
-        console.warn("Failed to load user", err);
+        console.warn("User not connected", err);
       } finally {
         setTimeout(() => setMountedFade(true), 20);
       }
@@ -72,7 +76,31 @@ export default function MiniPage() {
   }, []);
 
   /* -------------------------------------------------
-   *  2. Загрузка трейдов
+   *  2. Подключение кошелька
+   * ------------------------------------------------- */
+  const connectWallet = async () => {
+    try {
+      await (sdk.actions as any).requestWallet();
+
+      // Получаем пользователя после подключения
+      const userData: FarcasterUser | undefined = await (sdk as any).user?.get?.();
+
+      if (userData) {
+        setUser({
+          fid: userData.fid,
+          username: userData.username,
+          displayName: userData.displayName ?? userData.username,
+          pfpUrl: userData.pfp?.url,
+        });
+        setWalletConnected(true);
+      }
+    } catch (err) {
+      console.warn("Wallet connection failed or cancelled", err);
+    }
+  };
+
+  /* -------------------------------------------------
+   *  3. Загрузка трейдов
    * ------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
@@ -113,7 +141,7 @@ export default function MiniPage() {
       <div className="w-full max-w-4xl">
         <div className="mx-auto max-w-3xl rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)]">
           {/* ==================== HEADER ==================== */}
-          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex items-center justify-between">
+          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex items-center justify-between relative">
             <div>
               <h1 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
                 Polymarket Trade Radar
@@ -125,33 +153,50 @@ export default function MiniPage() {
               </div>
             </div>
 
-            {/* ---- Аватар пользователя ---- */}
-            {user ? (
-              <button
-                onClick={() =>
-                  sdk.actions.openUrl(`https://warpcast.com/~${user.username}`)
-                }
-                className="hover:opacity-80 transition-opacity"
-                title={`@${user.username}`}
-              >
-                {user.pfpUrl ? (
-                  <Image
-                    src={user.pfpUrl}
-                    alt={user.displayName}
-                    width={32}
-                    height={32}
-                    className="w-8 h-8 rounded-full object-cover border border-[var(--line)]"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                    {user.displayName.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </button>
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-[var(--line)]/30 animate-pulse" />
-            )}
+            {/* ---- Аватар или Connect Wallet ---- */}
+            <div className="relative">
+              {walletConnected && user ? (
+                <button
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  {user.pfpUrl ? (
+                    <Image
+                      src={user.pfpUrl}
+                      alt={user.displayName}
+                      width={32}
+                      height={32}
+                      className="w-8 h-8 rounded-full object-cover border border-[var(--line)]"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                      {user.displayName.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={connectWallet}
+                  className="px-3 py-1.5 text-[12px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-full border border-cyan-500/50 transition-colors"
+                >
+                  Connect Wallet
+                </button>
+              )}
+
+              {/* Выдвигающееся меню */}
+              {menuOpen && walletConnected && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--card)]/80 backdrop-blur-md border border-[var(--line)] rounded-lg shadow-lg py-2 z-50">
+                  <Link
+                    href="/degen-ideas"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-[13px] text-[var(--ink)] hover:bg-white/10 transition-colors"
+                  >
+                    Degen Ideas
+                  </Link>
+                </div>
+              )}
+            </div>
           </header>
 
           {/* ==================== FEED ==================== */}
@@ -177,7 +222,7 @@ export default function MiniPage() {
 }
 
 /* -------------------------------------------------
- *  Row – жёлтое выделение > 10 000 USD
+ *  Строка сделки
  * ------------------------------------------------- */
 function Row({ t }: { t: Trade }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
@@ -200,13 +245,12 @@ function Row({ t }: { t: Trade }) {
     <div
       className="px-4 py-2 text-[13px] font-mono text-emerald-200/90"
       style={rowStyle}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.backgroundColor = hoverStyle.backgroundColor)
-      }
-      onMouseLeave={(e) =>
-        (e.currentTarget.style.backgroundColor =
-          rowStyle.backgroundColor ?? "")
-      }
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = hoverStyle.backgroundColor;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = rowStyle.backgroundColor ?? "";
+      }}
     >
       <span className="text-emerald-300">[{time}]</span>{" "}
       <span className={`${sideColor} font-semibold`}>{t.side}</span>{" "}
@@ -234,7 +278,7 @@ function Row({ t }: { t: Trade }) {
 }
 
 /* -------------------------------------------------
- *  Skeleton
+ *  Скелетон
  * ------------------------------------------------- */
 function SkeletonRows() {
   return (
