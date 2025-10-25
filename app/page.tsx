@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { minikit } from "@coinbase/onchainkit";
-minikit.actions.ready();
+import { useMiniApp } from "@coinbase/onchainkit";  // ✅ ПРАВИЛЬНО
 
 type Trade = {
   id: string;
@@ -19,15 +18,16 @@ type Trade = {
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 export default function MiniPage() {
+  const mini = useMiniApp(); // ✅ ИНИЦИАЛИЗАЦИЯ SDK ПРАВИЛЬНО ЗДЕСЬ
   const [trades, setTrades] = useState<Trade[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false); // ✅ fade-in
 
-  // ✅ Farcaster splash fix
+  // ✅ Farcaster splash fix — ДЕЛАЙ ТОЛЬКО ВНУТРИ useEffect
   useEffect(() => {
-    actions.ready(); // <--- ИСПРАВЛЕНО
-    setTimeout(() => setMountedFade(true), 20); // soft fade-in
+    mini.actions.ready();   // ✅ вот тут корректный вызов
+    setTimeout(() => setMountedFade(true), 20);
   }, []);
 
   useEffect(() => {
