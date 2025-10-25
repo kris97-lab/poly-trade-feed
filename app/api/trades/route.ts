@@ -64,7 +64,11 @@ export async function GET() {
     // const data = await fetchPolymarket(); // ← включим, когда будет реальный endpoint
     const data = mock();
     return NextResponse.json(data, { status: 200 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "error" }, { status: 500 });
+  } catch (e) {
+  if (e instanceof Error) {
+    return NextResponse.json({ message: e.message }, { status: 500 });
   }
+  throw e;
+}
+
 }
