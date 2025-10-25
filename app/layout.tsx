@@ -12,12 +12,12 @@ export async function generateMetadata(): Promise<Metadata> {
     other: {
       "fc:frame": JSON.stringify({
         version: minikitConfig.miniapp.version,
-        imageUrl: minikitConfig.miniapp.heroImageUrl,
+        imageUrl: minikitConfig.miniapp.ogImageUrl, // ✅ заменили heroImageUrl на ogImageUrl — он существует
         button: {
-          title: `Join the ${minikitConfig.miniapp.name} Waitlist`,
+          title: `Launch ${minikitConfig.miniapp.name}`, // ✅ норм кнопка
           action: {
-            name: `Launch ${minikitConfig.miniapp.name}`,
-            type: "launch_frame",
+            name: "launch_frame",
+            type: "launch_frame", // ✅ Base expects exactly this
           },
         },
       }),
