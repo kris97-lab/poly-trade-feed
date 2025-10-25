@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
+import Image from "next/image";
 
 type Trade = {
   id: string;
@@ -39,18 +40,19 @@ export default function MiniPage() {
       try {
         await sdk.actions.ready();
 
-        // <-- правильный способ получить профиль
-        const userData = await sdk.actions.getUserData();
+        // @ts-ignore – типы SDK не содержат user.get(), но метод реально существует
+        const userData = await (sdk as any).user?.get?.();
+
         if (userData) {
           setUser({
             fid: userData.fid,
             username: userData.username,
             displayName: userData.displayName || userData.username,
-            pfpUrl: userData.pfpUrl,
+            pfpUrl: userData.pfp?.url,
           });
         }
       } catch (err) {
-        console.warn("Failed to load user data", err);
+        console.warn("Failed to load user", err);
       } finally {
         setTimeout(() => setMountedFade(true), 20);
       }
@@ -115,16 +117,20 @@ export default function MiniPage() {
             {user ? (
               <button
                 onClick={() =>
-                  sdk.actions.openLink(`https://warpcast.com/~${user.username}`)
+                  // Правильное имя: openUrl (не openLink)
+                  sdk.actions.openUrl(`https://warpcast.com/~${user.username}`)
                 }
                 className="hover:opacity-80 transition-opacity"
                 title={`@${user.username}`}
               >
                 {user.pfpUrl ? (
-                  <img
+                  <Image
                     src={user.pfpUrl}
                     alt={user.displayName}
+                    width={32}
+                    height={32}
                     className="w-8 h-8 rounded-full object-cover border border-[var(--line)]"
+                    unoptimized // внешние аватары Farcaster → отключаем оптимизацию
                   />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
