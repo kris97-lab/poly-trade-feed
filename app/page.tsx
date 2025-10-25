@@ -53,7 +53,7 @@ export default function MiniPage() {
   }, []);
 
   return (
-    <main className="min-h-dvh flex items-center justify-center p-4 md:p-8 bg-[var(--bg)]">
+ <main className="min-h-screen w-full flex items-center justify-center p-4 md:p-8 bg-[var(--bg)]">
       <div className="w-full max-w-4xl">
         {/* Bannner / frame top */}
         <div className="mx-auto max-w-3xl rounded-t-[18px] border-x border-t border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)]">
