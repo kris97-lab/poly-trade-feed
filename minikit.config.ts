@@ -15,7 +15,7 @@ export const minikitConfig = {
     version: "1",
     name: "Polymarket Trade Feed",
     subtitle: "Real-time onchain terminal",
-    description: "Live feed of Polymarket trades > $800 for Farcaster mini app.",
+    description: "Live feed of Polymarket trades over 800 USD for Farcaster mini app.",
     screenshotUrls: [`${ROOT_URL}/screenshot-portrait.png`],
     iconUrl: `${ROOT_URL}/blue-icon.png`,
     splashImageUrl: `${ROOT_URL}/blue-hero.png`,
@@ -29,7 +29,7 @@ export const minikitConfig = {
     },
 
     ogTitle: "Polymarket Trade Feed",
-    ogDescription: "Farcaster Mini App — real-time feed of >$800 trades on Polymarket",
+    ogDescription: "Real-time Polymarket trade feed over 800 USD for Farcaster Mini App",
     ogImageUrl: `${ROOT_URL}/blue-hero.png`
   }
 } as const;
