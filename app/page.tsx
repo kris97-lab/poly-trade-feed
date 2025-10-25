@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
 import Image from "next/image";
 import Link from "next/link";
 
-/* -------------------------------------------------
- *  Типы
- * ------------------------------------------------- */
 type Trade = {
   id: string;
   ts: string;
@@ -29,9 +26,6 @@ type FarcasterUser = {
 
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
-/* -------------------------------------------------
- *  Главная страница
- * ------------------------------------------------- */
 export default function MiniPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -45,20 +39,37 @@ export default function MiniPage() {
   } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  /* -------------------------------------------------
-   *  1. SDK ready + пользователь
-   * ------------------------------------------------- */
+  // Автозакрытие меню при клике вне
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, []);
+
+  // SDK ready + Quick Auth для пользователя (аватар без кошелька)
   useEffect(() => {
     (async () => {
       try {
+        console.log("SDK: Calling ready()");
         await sdk.actions.ready();
+        console.log("SDK: Ready called");
 
-        const userData: FarcasterUser | undefined = await (
-          sdk as unknown as { user?: { get?: () => Promise<FarcasterUser | undefined> } }
-        ).user?.get?.();
-
-        if (userData) {
+        // Quick Auth для получения пользователя (FID, username, PFP)
+        console.log("SDK: Fetching quickAuth");
+        const res = await sdk.quickAuth.fetch("https://your-backend.com/auth"); // Замени на твой backend или используй mock
+        if (res.ok) {
+          const userData: FarcasterUser = await res.json();
+          console.log("SDK: User data received", userData);
           setUser({
             fid: userData.fid,
             username: userData.username,
@@ -66,26 +77,28 @@ export default function MiniPage() {
             pfpUrl: userData.pfp?.url,
           });
           setWalletConnected(true);
+        } else {
+          console.log("SDK: QuickAuth failed, showing Connect Wallet");
         }
       } catch (err) {
-        console.warn("User not connected", err);
+        console.warn("SDK: Init error", err);
       } finally {
         setTimeout(() => setMountedFade(true), 20);
       }
     })();
   }, []);
 
-  /* -------------------------------------------------
-   *  2. Подключение кошелька
-   * ------------------------------------------------- */
+  // Подключение кошелька (EVM provider)
   const connectWallet = async () => {
     try {
-      await (sdk.actions as any).requestWallet();
+      console.log("Wallet: Requesting connection");
+      await sdk.actions.requestWallet();
+      console.log("Wallet: Connected");
 
-      // Получаем пользователя после подключения
-      const userData: FarcasterUser | undefined = await (sdk as any).user?.get?.();
-
-      if (userData) {
+      // После подключения — обновляем пользователя
+      const res = await sdk.quickAuth.fetch("https://your-backend.com/auth");
+      if (res.ok) {
+        const userData: FarcasterUser = await res.json();
         setUser({
           fid: userData.fid,
           username: userData.username,
@@ -95,13 +108,11 @@ export default function MiniPage() {
         setWalletConnected(true);
       }
     } catch (err) {
-      console.warn("Wallet connection failed or cancelled", err);
+      console.warn("Wallet: Connection failed", err);
     }
   };
 
-  /* -------------------------------------------------
-   *  3. Загрузка трейдов
-   * ------------------------------------------------- */
+  // Загрузка трейдов (без изменений)
   useEffect(() => {
     let mounted = true;
     const pull = async () => {
@@ -140,9 +151,9 @@ export default function MiniPage() {
     >
       <div className="w-full max-w-4xl">
         <div className="mx-auto max-w-3xl rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)]">
-          {/* ==================== HEADER ==================== */}
-          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex items-center justify-between relative">
-            <div>
+          {/* HEADER — улучшен для iOS */}
+          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex items-center justify-between relative min-h-[80px]">
+            <div className="flex-1 pr-2"> {/* flex-1 для заголовка */}
               <h1 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
                 Polymarket Trade Radar
               </h1>
@@ -153,12 +164,13 @@ export default function MiniPage() {
               </div>
             </div>
 
-            {/* ---- Аватар или Connect Wallet ---- */}
-            <div className="relative">
+            {/* ПРАВЫЙ ЭЛЕМЕНТ — улучшен для iOS (padding-right, z-index, touch-action) */}
+            <div ref={menuRef} className="relative pr-4 z-10"> {/* pr-4 для правого края на iPhone */}
               {walletConnected && user ? (
                 <button
                   onClick={() => setMenuOpen((prev) => !prev)}
-                  className="hover:opacity-80 transition-opacity"
+                  className="hover:opacity-80 transition-opacity cursor-pointer touch-manipulation select-none" // iOS: touch-action + select-none
+                  style={{ touchAction: "manipulation" }} // iOS: предотвращает зум/скролл
                 >
                   {user.pfpUrl ? (
                     <Image
@@ -178,13 +190,14 @@ export default function MiniPage() {
               ) : (
                 <button
                   onClick={connectWallet}
-                  className="px-3 py-1.5 text-[12px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-full border border-cyan-500/50 transition-colors"
+                  className="px-3 py-1.5 text-[12px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-full border border-cyan-500/50 transition-colors cursor-pointer touch-manipulation select-none z-10" // z-10 + iOS стили
+                  style={{ touchAction: "manipulation" }}
                 >
                   Connect Wallet
                 </button>
               )}
 
-              {/* Выдвигающееся меню */}
+              {/* МЕНЮ — улучшено */}
               {menuOpen && walletConnected && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--card)]/80 backdrop-blur-md border border-[var(--line)] rounded-lg shadow-lg py-2 z-50">
                   <Link
@@ -199,7 +212,7 @@ export default function MiniPage() {
             </div>
           </header>
 
-          {/* ==================== FEED ==================== */}
+          {/* FEED — без изменений */}
           <div className="max-h-[70vh] overflow-auto bg-[var(--card)]">
             {loading ? (
               <SkeletonRows />
@@ -221,9 +234,7 @@ export default function MiniPage() {
   );
 }
 
-/* -------------------------------------------------
- *  Строка сделки
- * ------------------------------------------------- */
+// Row и SkeletonRows — без изменений (из предыдущего кода)
 function Row({ t }: { t: Trade }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
   const sideColor = t.side === "BUY" ? "text-emerald-300" : "text-red-300";
@@ -277,9 +288,6 @@ function Row({ t }: { t: Trade }) {
   );
 }
 
-/* -------------------------------------------------
- *  Скелетон
- * ------------------------------------------------- */
 function SkeletonRows() {
   return (
     <div className="p-4 space-y-2">
