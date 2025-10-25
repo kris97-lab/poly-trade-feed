@@ -1,120 +1,147 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useQuickAuth,useMiniKit } from "@coinbase/onchainkit/minikit";
-import { useRouter } from "next/navigation";
-import { minikitConfig } from "../minikit.config";
-import styles from "./page.module.css";
 
-interface AuthResponse {
-  success: boolean;
-  user?: {
-    fid: number; // FID is the unique identifier for the user
-    issuedAt?: number;
-    expiresAt?: number;
-  };
-  message?: string; // Error messages come as 'message' not 'error'
-}
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 
+type Trade = {
+  id: string;
+  ts: string;             // ISO timestamp
+  side: "BUY" | "SELL";
+  amountUSD: number;      // notional in USD
+  price?: number;         // optional price (0..1)
+  outcome?: string;       // e.g. "Yes" / "No"
+  market: string;         // market title
+  url?: string;           // link to market/trade
+};
 
-export default function Home() {
-  const { isFrameReady, setFrameReady, context } = useMiniKit();
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const router = useRouter();
+const USD = (n: number) =>
+  `$${Math.round(n).toLocaleString("en-US")}`;
 
-  // Initialize the  miniapp
+export default function MiniPage() {
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    if (!isFrameReady) {
-      setFrameReady();
-    }
-  }, [setFrameReady, isFrameReady]);
- 
-  
+    let mounted = true;
 
-  // If you need to verify the user's identity, you can use the useQuickAuth hook.
-  // This hook will verify the user's signature and return the user's FID. You can update
-  // this to meet your needs. See the /app/api/auth/route.ts file for more details.
-  // Note: If you don't need to verify the user's identity, you can get their FID and other user data
-  // via `context.user.fid`.
-  // const { data, isLoading, error } = useQuickAuth<{
-  //   userFid: string;
-  // }>("/api/auth");
+    const pull = async () => {
+      try {
+        const r = await fetch("/api/trades", { cache: "no-store" });
+        if (!r.ok) throw new Error("Failed to load trades");
+        const data: Trade[] = await r.json();
 
-  const { data: authData, isLoading: isAuthLoading, error: authError } = useQuickAuth<AuthResponse>(
-    "/api/auth",
-    { method: "GET" }
-  );
+        if (!mounted) return;
+        const filtered = data
+          .filter((t) => (t.amountUSD ?? 0) >= 800)
+          .sort((a, b) => +new Date(b.ts) - +new Date(a.ts))
+          .slice(0, 100);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+        setTrades(filtered);
+        setUpdatedAt(new Date());
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        if (mounted) setLoading(false);
+      }
+    };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    // Check authentication first
-    if (isAuthLoading) {
-      setError("Please wait while we verify your identity...");
-      return;
-    }
-
-    if (authError || !authData?.success) {
-      setError("Please authenticate to join the waitlist");
-      return;
-    }
-
-    if (!email) {
-      setError("Please enter your email address");
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address");
-      return;
-    }
-
-    // TODO: Save email to database/API with user FID
-    console.log("Valid email submitted:", email);
-    console.log("User authenticated:", authData.user);
-    
-    // Navigate to success page
-    router.push("/success");
-  };
+    pull();
+    const id = setInterval(pull, 10_000); // 10s polling
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, []);
 
   return (
-    <div className={styles.container}>
-      <button className={styles.closeButton} type="button">
-        ✕
-      </button>
-      
-      <div className={styles.content}>
-        <div className={styles.waitlistForm}>
-          <h1 className={styles.title}>Join {minikitConfig.miniapp.name.toUpperCase()}</h1>
-          
-          <p className={styles.subtitle}>
-             Hey {context?.user?.displayName || "there"}, Get early access and be the first to experience the future of<br />
-            crypto marketing strategy.
-          </p>
+    <main className="p-3 md:p-6">
+      <div className="mx-auto max-w-5xl rounded-lg border border-[var(--line)] bg-[var(--bg)] shadow-sm">
+        {/* Header */}
+        <div className="border-b border-[var(--line)] px-3 py-2 text-center">
+          <h1 className="font-[var(--font-playfair)] text-xl md:text-2xl text-emerald-300 tracking-wide">
+            Polymarket Live Trades &gt; 800 USD
+          </h1>
+          <div className="mt-1 text-[11px] text-emerald-200/80">
+            Updated: {updatedAt ? format(updatedAt, "HH:mm:ss") : "— — : — — : — —"}
+          </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <input
-              type="email"
-              placeholder="Your amazing email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={styles.emailInput}
-            />
-            
-            {error && <p className={styles.error}>{error}</p>}
-            
-            <button type="submit" className={styles.joinButton}>
-              JOIN WAITLIST
-            </button>
-          </form>
+        {/* Table header (thin line) */}
+        <div className="border-b border-[var(--line)] px-2 py-1 text-[11px] text-emerald-300/80 font-mono">
+          [time]   [side]   [$notional | $price ($amount)]   |   market   [View]
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-[var(--line)]">
+          {loading ? (
+            <SkeletonRows />
+          ) : trades.length === 0 ? (
+            <div className="p-3 text-[12px] text-emerald-200/70">
+              listening for &gt; 800 USD fills…
+            </div>
+          ) : (
+            trades.map((t) => <Row key={t.id} t={t} />)
+          )}
         </div>
       </div>
+    </main>
+  );
+}
+
+function Row({ t }: { t: Trade }) {
+  const time = format(new Date(t.ts), "HH:mm:ss");
+  const sideColor =
+    t.side === "BUY" ? "text-emerald-300" : "text-red-300";
+
+  return (
+    <div className="px-2 py-1 text-[12px] md:text-[13px] font-mono text-emerald-200/90">
+      <span className="text-emerald-300">[{time}]</span>{" "}
+      <span className={`${sideColor} font-semibold`}>{t.side.padEnd(3, " ")}</span>{"  "}
+      <span>
+        {USD(t.amountUSD)}
+        {typeof t.price === "number" && (
+          <>
+            {" "} | {" "}${t.price.toFixed(2)}{" "}
+            {typeof t.amountUSD === "number" && (
+              <span className="text-emerald-300/80">
+                ({USD(t.amountUSD)})
+              </span>
+            )}
+          </>
+        )}
+      </span>
+      {"  "} | {"  "}
+      <span className="whitespace-pre-wrap">
+        {t.outcome ? `${t.outcome} | ` : ""}
+        {t.market}
+      </span>{"  "}
+      {t.url && (
+        <>
+          {" "}
+          <a
+            href={t.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-cyan-300 underline decoration-dotted hover:brightness-125"
+          >
+            [View]
+          </a>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SkeletonRows() {
+  return (
+    <div className="p-2 space-y-1">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div
+          key={i}
+          className="h-5 rounded bg-[var(--line)]/60 animate-pulse"
+        />
+      ))}
     </div>
   );
 }
