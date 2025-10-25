@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { minikit } from "@coinbase/onchainkit";
-...
 minikit.actions.ready();
 
 type Trade = {
