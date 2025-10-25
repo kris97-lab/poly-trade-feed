@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { actions } from "@coinbase/onchainkit/minikit"; // ✅ правильный импорт
+import { minikit } from "@coinbase/onchainkit";
+...
+minikit.actions.ready();
 
 type Trade = {
   id: string;
