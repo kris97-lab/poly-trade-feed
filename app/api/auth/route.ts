@@ -71,12 +71,10 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (e) {
-    if (e instanceof Errors.InvalidTokenError) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 });
-    }
-    if (e instanceof Error) {
-      return NextResponse.json({ message: e.message }, { status: 500 });
-    }
-    throw e;
+  if (e instanceof Error) {
+    return NextResponse.json({ message: e.message }, { status: 500 });
   }
+  throw e;
+}
+
 }
