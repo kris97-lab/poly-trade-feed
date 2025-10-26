@@ -21,8 +21,7 @@ interface MiniAppSDK {
   };
 }
 
-const miniapp: MiniAppSDK | null = isMiniApp ? (window as any).farcaster : null;
-
+const miniapp: MiniAppSDK | null = isMiniApp ? (window as unknown as { farcaster: MiniAppSDK }).farcaster : null;
 const safeNotify = async (options: { type: "success" | "error" | "info"; message: string }) => {
   if (miniapp?.actions?.notify) {
     try {
