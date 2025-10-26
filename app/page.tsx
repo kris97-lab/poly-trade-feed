@@ -37,14 +37,15 @@ export default function MiniPage() {
   }, []);
 
   // Connect wallet from START gate
-  const connectWallet = async () => {
-    try {
-      await sdk.actions.requestWallet();
-      setWalletConnected(true);
-    } catch {
-      // user cancelled or provider not available – keep gate visible
-    }
-  };
+const connectWallet = async () => {
+  try {
+    await sdk.actions.openWallet();  // ✅ универсальный способ
+    setWalletConnected(true);
+  } catch {
+    // user cancelled or provider not available – remain on gate
+  }
+};
+
 
   // Load trades only after wallet is connected
   useEffect(() => {
