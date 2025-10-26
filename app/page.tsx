@@ -29,9 +29,7 @@ export default function MiniPage() {
     (async () => {
       try {
         await sdk.actions.ready();
-      } catch {
-        // ignore
-      }
+      } catch {}
       setTimeout(() => setMountedFade(true), 20);
     })();
   }, []);
@@ -39,16 +37,14 @@ export default function MiniPage() {
   // === Проверка и восстановление подключения кошелька ===
   const checkWallet = useCallback(async () => {
     try {
-      const provider = sdk.wallet.getEthereumProvider();
+      const provider = await sdk.wallet.getEthereumProvider();
       if (!provider) return;
 
       const accounts = await provider.request({ method: "eth_accounts" });
       if (accounts && accounts.length > 0) {
         setWalletAddress(accounts[0]);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -60,7 +56,7 @@ export default function MiniPage() {
   // === Подключение кошелька ===
   const connectWallet = async () => {
     try {
-      const provider = sdk.wallet.getEthereumProvider();
+      const(provider = await sdk.wallet.getEthereumProvider();
       if (!provider) {
         await sdk.actions.notify({ type: "error", message: "Wallet not available" });
         return;
@@ -103,7 +99,7 @@ export default function MiniPage() {
     };
 
     pull();
-    const id = setInterval(pull, 15_000); // 15 сек в проде
+    const id = setInterval(pull, 15_000);
     return () => {
       mounted = false;
       clearInterval(id);
