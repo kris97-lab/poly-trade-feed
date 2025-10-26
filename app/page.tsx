@@ -3,8 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { createPublicClient, http } from "viem";
-import { mainnet } from "viem/chains";
 
 type Trade = {
   id: string;
@@ -18,12 +16,6 @@ type Trade = {
 };
 
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-
-// Публичный клиент для проверки адреса (не обязателен, но полезен)
-const publicClient = createPublicClient({
-  chain: mainnet,
-  transport: http(),
-});
 
 export default function MiniPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -54,14 +46,14 @@ export default function MiniPage() {
       if (accounts && accounts.length > 0) {
         setWalletAddress(accounts[0]);
       }
-    } catch (error) {
-      console.error("Wallet check failed:", error);
+    } catch {
+      // ignore
     }
   }, []);
 
   useEffect(() => {
     checkWallet();
-    const interval = setInterval(checkWallet, 3000); // авто-восстановление
+    const interval = setInterval(checkWallet, 3000);
     return () => clearInterval(interval);
   }, [checkWallet]);
 
@@ -79,12 +71,8 @@ export default function MiniPage() {
         setWalletAddress(accounts[0]);
         await sdk.actions.notify({ type: "success", message: "Wallet connected" });
       }
-    } catch (error: any) {
-      if (error.code === 4001) {
-        await sdk.actions.notify({ type: "info", message: "Connection cancelled" });
-      } else {
-        await sdk.actions.notify({ type: "error", message: "Connection failed" });
-      }
+    } catch {
+      await sdk.actions.notify({ type: "info", message: "Connection cancelled" });
     }
   };
 
@@ -109,13 +97,13 @@ export default function MiniPage() {
         setTrades(filtered);
         setUpdatedAt(new Date());
         setLoading(false);
-      } catch (err) {
+      } catch {
         if (mounted) setLoading(false);
       }
     };
 
     pull();
-    const id = setInterval(pull, 10_000);
+    const id = setInterval(pull, 15_000); // 15 сек в проде
     return () => {
       mounted = false;
       clearInterval(id);
