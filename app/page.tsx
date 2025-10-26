@@ -3,13 +3,22 @@
 import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 
-// === Безопасная обёртка для miniapp-sdk ===
+// === Проверка на Mini App ===
 const isMiniApp = typeof window !== "undefined" && !!(window as any).farcaster;
-
-let miniapp: any = null;
-if (isMiniApp) {
-  miniapp = (window as any).farcaster;
-}
+const miniapp: {
+  actions?: {
+    ready?: () => Promise<void>;
+    notify?: (options: { type: "success" | "error" | "info"; message: string }) => Promise<void>;
+    copy?: (text: string) => Promise<void>;
+    close?: () => Promise<void>;
+    openUrl?: (url: string) => Promise<void>;
+  };
+  wallet?: {
+    getEthereumProvider?: () => Promise<{
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+    }>;
+  };
+} | null = isMiniApp ? (window as any).farcaster : null;
 
 const safeNotify = async (options: { type: "success" | "error" | "info"; message: string }) => {
   if (miniapp?.actions?.notify) {
@@ -43,28 +52,26 @@ export default function MiniPage() {
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false);
 
-  // === Готовность (только если в Mini App) ===
   useEffect(() => {
-    if (isMiniApp && miniapp?.actions?.ready) {
+    if (miniapp?.actions?.ready) {
       miniapp.actions.ready();
     }
     setTimeout(() => setMountedFade(true), 20);
   }, []);
 
-  // === Проверка и восстановление кошелька ===
   const checkWallet = useCallback(async () => {
-    if (!isMiniApp || !miniapp?.wallet?.getEthereumProvider) return;
+    if (!miniapp?.wallet?.getEthereumProvider) return;
 
     try {
       const provider = await miniapp.wallet.getEthereumProvider();
       if (!provider) return;
 
-      const accounts = await provider.request({ method: "eth_accounts" });
+      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       if (accounts?.length > 0) {
         setWalletAddress(accounts[0]);
       }
-    } catch (e) {
-      console.log("Wallet check failed:", e);
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -74,35 +81,33 @@ export default function MiniPage() {
     return () => clearInterval(interval);
   }, [checkWallet]);
 
-  // === Подключение кошелька ===
   const connectWallet = async () => {
-    if (!isMiniApp) {
-      alert("Open in Warpcast to connect wallet");
+    if (!miniapp) {
+      alert("Open in Warpcast");
       return;
     }
 
     try {
-      const provider = await miniapp.wallet.getEthereumProvider();
+      const provider = await miniapp.wallet!.getEthereumProvider!();
       if (!provider) {
         await safeNotify({ type: "error", message: "Wallet not available" });
         return;
       }
 
-      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
       if (accounts?.length > 0) {
         setWalletAddress(accounts[0]);
         await safeNotify({ type: "success", message: "Connected!" });
       }
     } catch (error: any) {
-      if (error.code === 4001) {
+      if (error?.code === 4001) {
         await safeNotify({ type: "info", message: "Cancelled" });
       } else {
-        await safeNotify({ type: "error", message: "Connection failed" });
+        await safeNotify({ type: "error", message: "Failed" });
       }
     }
   };
 
-  // === Загрузка трейдов ===
   useEffect(() => {
     if (!walletAddress) return;
 
@@ -111,7 +116,7 @@ export default function MiniPage() {
     const pull = async () => {
       try {
         const r = await fetch("/api/trades", { cache: "no-store" });
-        if (!r.ok) throw new Error("Failed");
+        if (!r.ok) throw new Error();
         const data: Trade[] = await r.json();
         if (!mounted) return;
 
@@ -136,9 +141,8 @@ export default function MiniPage() {
     };
   }, [walletAddress]);
 
-  // === Кнопки ===
   const copyAddress = () => {
-    if (walletAddress && isMiniApp && miniapp?.actions?.copy) {
+    if (walletAddress && miniapp?.actions?.copy) {
       miniapp.actions.copy(walletAddress);
     } else if (walletAddress) {
       navigator.clipboard.writeText(walletAddress);
@@ -147,7 +151,7 @@ export default function MiniPage() {
   };
 
   const closeApp = () => {
-    if (isMiniApp && miniapp?.actions?.close) {
+    if (miniapp?.actions?.close) {
       miniapp.actions.close();
     } else {
       window.close();
@@ -156,14 +160,13 @@ export default function MiniPage() {
 
   const openTrade = (url?: string) => {
     if (!url) return;
-    if (isMiniApp && miniapp?.actions?.openUrl) {
+    if (miniapp?.actions?.openUrl) {
       miniapp.actions.openUrl(url);
     } else {
       window.open(url, "_blank");
     }
   };
 
-  // === GATE SCREEN ===
   if (!walletAddress) {
     return (
       <main className={`min-h-screen w-full flex items-center justify-center p-6 bg-[var(--bg)] transition-opacity duration-150 ${mountedFade ? "opacity-100" : "opacity-0"}`}>
@@ -173,13 +176,13 @@ export default function MiniPage() {
               Polymarket Trade Radar
             </h1>
             <p className="mt-2 text-[12px] text-[var(--muted)]">
-              {isMiniApp ? "Connect wallet to enter" : "Open in Warpcast"}
+              {miniapp ? "Connect wallet to enter" : "Open in Warpcast"}
             </p>
             <button
               onClick={connectWallet}
               className="mt-6 inline-flex items-center justify-center rounded-full border border-[var(--line)] bg-white/5 hover:bg-white/10 active:bg-white/15 px-6 py-2 text-[13px] text-[var(--ink)] transition-colors"
             >
-              {isMiniApp ? "START" : "Open in Warpcast"}
+              {miniapp ? "START" : "Open in Warpcast"}
             </button>
           </div>
         </div>
@@ -187,7 +190,6 @@ export default function MiniPage() {
     );
   }
 
-  // === TERMINAL ===
   return (
     <main className={`min-h-screen w-full flex flex-col p-4 md:p-8 bg-[var(--bg)] transition-opacity duration-150 ${mountedFade ? "opacity-100" : "opacity-0"}`}>
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
