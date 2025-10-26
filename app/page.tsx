@@ -56,7 +56,7 @@ export default function MiniPage() {
   // === Подключение кошелька ===
   const connectWallet = async () => {
     try {
-      const(provider = await sdk.wallet.getEthereumProvider();
+      const provider = await sdk.wallet.getEthereumProvider();
       if (!provider) {
         await sdk.actions.notify({ type: "error", message: "Wallet not available" });
         return;
