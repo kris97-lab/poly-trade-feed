@@ -2,7 +2,26 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
-import { sdk } from "@farcaster/miniapp-sdk";
+
+// === Безопасная обёртка для miniapp-sdk ===
+const isMiniApp = typeof window !== "undefined" && !!(window as any).farcaster;
+
+let miniapp: any = null;
+if (isMiniApp) {
+  miniapp = (window as any).farcaster;
+}
+
+const safeNotify = async (options: { type: "success" | "error" | "info"; message: string }) => {
+  if (miniapp?.actions?.notify) {
+    try {
+      await miniapp.actions.notify(options);
+    } catch {
+      alert(`${options.type.toUpperCase()}: ${options.message}`);
+    }
+  } else {
+    console.log("[Notify]", options);
+  }
+};
 
 type Trade = {
   id: string;
@@ -24,27 +43,29 @@ export default function MiniPage() {
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false);
 
-  // === Farcaster: готовность приложения ===
+  // === Готовность (только если в Mini App) ===
   useEffect(() => {
-    (async () => {
-      try {
-        await sdk.actions.ready();
-      } catch {}
-      setTimeout(() => setMountedFade(true), 20);
-    })();
+    if (isMiniApp && miniapp?.actions?.ready) {
+      miniapp.actions.ready();
+    }
+    setTimeout(() => setMountedFade(true), 20);
   }, []);
 
-  // === Проверка и восстановление подключения кошелька ===
+  // === Проверка и восстановление кошелька ===
   const checkWallet = useCallback(async () => {
+    if (!isMiniApp || !miniapp?.wallet?.getEthereumProvider) return;
+
     try {
-      const provider = await sdk.wallet.getEthereumProvider();
+      const provider = await miniapp.wallet.getEthereumProvider();
       if (!provider) return;
 
       const accounts = await provider.request({ method: "eth_accounts" });
-      if (accounts && accounts.length > 0) {
+      if (accounts?.length > 0) {
         setWalletAddress(accounts[0]);
       }
-    } catch {}
+    } catch (e) {
+      console.log("Wallet check failed:", e);
+    }
   }, []);
 
   useEffect(() => {
@@ -55,20 +76,29 @@ export default function MiniPage() {
 
   // === Подключение кошелька ===
   const connectWallet = async () => {
+    if (!isMiniApp) {
+      alert("Open in Warpcast to connect wallet");
+      return;
+    }
+
     try {
-      const provider = await sdk.wallet.getEthereumProvider();
+      const provider = await miniapp.wallet.getEthereumProvider();
       if (!provider) {
-        await sdk.actions.notify({ type: "error", message: "Wallet not available" });
+        await safeNotify({ type: "error", message: "Wallet not available" });
         return;
       }
 
       const accounts = await provider.request({ method: "eth_requestAccounts" });
-      if (accounts && accounts.length > 0) {
+      if (accounts?.length > 0) {
         setWalletAddress(accounts[0]);
-        await sdk.actions.notify({ type: "success", message: "Wallet connected" });
+        await safeNotify({ type: "success", message: "Connected!" });
       }
-    } catch {
-      await sdk.actions.notify({ type: "info", message: "Connection cancelled" });
+    } catch (error: any) {
+      if (error.code === 4001) {
+        await safeNotify({ type: "info", message: "Cancelled" });
+      } else {
+        await safeNotify({ type: "error", message: "Connection failed" });
+      }
     }
   };
 
@@ -81,7 +111,7 @@ export default function MiniPage() {
     const pull = async () => {
       try {
         const r = await fetch("/api/trades", { cache: "no-store" });
-        if (!r.ok) throw new Error("Failed to load trades");
+        if (!r.ok) throw new Error("Failed");
         const data: Trade[] = await r.json();
         if (!mounted) return;
 
@@ -106,33 +136,50 @@ export default function MiniPage() {
     };
   }, [walletAddress]);
 
-  // === Кнопки по стандартам Mini Apps ===
-  const copyAddress = () => walletAddress && sdk.actions.copy(walletAddress);
-  const refresh = () => window.location.reload();
-  const closeApp = () => sdk.actions.close();
-  const openTrade = (url?: string) => url && sdk.actions.openUrl(url);
+  // === Кнопки ===
+  const copyAddress = () => {
+    if (walletAddress && isMiniApp && miniapp?.actions?.copy) {
+      miniapp.actions.copy(walletAddress);
+    } else if (walletAddress) {
+      navigator.clipboard.writeText(walletAddress);
+      alert("Copied!");
+    }
+  };
+
+  const closeApp = () => {
+    if (isMiniApp && miniapp?.actions?.close) {
+      miniapp.actions.close();
+    } else {
+      window.close();
+    }
+  };
+
+  const openTrade = (url?: string) => {
+    if (!url) return;
+    if (isMiniApp && miniapp?.actions?.openUrl) {
+      miniapp.actions.openUrl(url);
+    } else {
+      window.open(url, "_blank");
+    }
+  };
 
   // === GATE SCREEN ===
   if (!walletAddress) {
     return (
-      <main
-        className={`min-h-screen w-full flex items-center justify-center p-6 bg-[var(--bg)] transition-opacity duration-150 ${
-          mountedFade ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      <main className={`min-h-screen w-full flex items-center justify-center p-6 bg-[var(--bg)] transition-opacity duration-150 ${mountedFade ? "opacity-100" : "opacity-0"}`}>
         <div className="w-full max-w-md text-center">
           <div className="rounded-[18px] border border-[var(--line)] bg-[var(--panel)]/70 backdrop-blur-sm shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)] px-6 py-8">
             <h1 className="text-[22px] md:text-[24px] font-[var(--font-playfair)] text-[var(--ink)]">
               Polymarket Trade Radar
             </h1>
             <p className="mt-2 text-[12px] text-[var(--muted)]">
-              Restricted access. Connect wallet to enter the terminal.
+              {isMiniApp ? "Connect wallet to enter" : "Open in Warpcast"}
             </p>
             <button
               onClick={connectWallet}
               className="mt-6 inline-flex items-center justify-center rounded-full border border-[var(--line)] bg-white/5 hover:bg-white/10 active:bg-white/15 px-6 py-2 text-[13px] text-[var(--ink)] transition-colors"
             >
-              START
+              {isMiniApp ? "START" : "Open in Warpcast"}
             </button>
           </div>
         </div>
@@ -142,14 +189,9 @@ export default function MiniPage() {
 
   // === TERMINAL ===
   return (
-    <main
-      className={`min-h-screen w-full flex flex-col p-4 md:p-8 bg-[var(--bg)] transition-opacity duration-150 ${
-        mountedFade ? "opacity-100" : "opacity-0"
-      }`}
-    >
+    <main className={`min-h-screen w-full flex flex-col p-4 md:p-8 bg-[var(--bg)] transition-opacity duration-150 ${mountedFade ? "opacity-100" : "opacity-0"}`}>
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
         <div className="rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)] flex flex-col h-full">
-          {/* Header */}
           <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex justify-between items-start">
             <div>
               <h2 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
@@ -160,49 +202,28 @@ export default function MiniPage() {
               </div>
             </div>
             <div className="flex gap-1">
-              <button
-                onClick={copyAddress}
-                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
-                title="Copy address"
-              >
+              <button onClick={copyAddress} className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]" title="Copy">
                 Copy
               </button>
-              <button
-                onClick={refresh}
-                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
-                title="Refresh"
-              >
+              <button onClick={() => location.reload()} className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]" title="Refresh">
                 Refresh
               </button>
-              <button
-                onClick={closeApp}
-                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
-                title="Close"
-              >
+              <button onClick={closeApp} className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]" title="Close">
                 Close
               </button>
             </div>
           </header>
 
-          {/* Wallet Info */}
-          <div className="px-4 py-2 text-[10px] text-[var(--muted)] border-b border-[var(--line)] bg-[var(--card)]">
-            Wallet: {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-            <button
-              onClick={() => setWalletAddress(null)}
-              className="ml-2 text-red-400 hover:text-red-300"
-            >
+          <div className="px-4 py-2 text-[10px] text-[var(--muted)] border-b border-[var(--line)] bg-[var(--card)] flex justify-between items-center">
+            <span>Wallet: {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}</span>
+            <button onClick={() => setWalletAddress(null)} className="text-red-400 hover:text-red-300">
               [Disconnect]
             </button>
           </div>
 
-          {/* Trades Feed */}
           <div className="flex-1 overflow-auto bg-[var(--card)] min-h-0">
-            {loading ? (
-              <SkeletonRows />
-            ) : trades.length === 0 ? (
-              <div className="p-4 text-[12px] text-[var(--muted)]">
-                Listening for ≥ 800 USD fills…
-              </div>
+            {loading ? <SkeletonRows /> : trades.length === 0 ? (
+              <div className="p-4 text-[12px] text-[var(--muted)]">Listening for ≥ $800 fills…</div>
             ) : (
               <div className="divide-y divide-[var(--line)]">
                 {trades.map((t) => (
@@ -221,38 +242,25 @@ function Row({ t, onView }: { t: Trade; onView: () => void }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
   const isHighBuy = t.side === "BUY" && t.amountUSD > 10_000;
 
-  const base =
-    "px-4 py-2 text-[13px] font-mono transition-colors duration-150 text-emerald-200/90 cursor-pointer";
-  const high = "bg-[#6f5b1a]/25 ring-1 ring-[#6f5b1a]/30";
-  const hover = "hover:bg-white/3";
-
   return (
-    <div onClick={onView} className={`${base} ${isHighBuy ? high : hover}`}>
+    <div onClick={onView} className={`px-4 py-2 text-[13px] font-mono transition-colors cursor-pointer text-emerald-200/90 ${isHighBuy ? "bg-yellow-900/20 ring-1 ring-yellow-600/30" : "hover:bg-white/3"}`}>
       <span className="inline-flex items-center">
         {isHighBuy && <span className="text-yellow-300 mr-1">Star</span>}
         <span className="text-emerald-300">[{time}]</span>
       </span>{" "}
-      <span
-        className={
-          t.side === "BUY" ? "text-emerald-300 font-semibold" : "text-red-300 font-semibold"
-        }
-      >
+      <span className={t.side === "BUY" ? "text-emerald-300 font-semibold" : "text-red-300 font-semibold"}>
         {t.side}
       </span>{" "}
       <span>
         {USD(t.amountUSD)}
-        {typeof t.price === "number" && <> | ${t.price.toFixed(2)}</>}
+        {t.price && <> | ${t.price.toFixed(2)}</>}
       </span>{" "}
       |{" "}
       <span className="whitespace-pre-wrap text-[var(--ink)]/90">
         {t.outcome ? `${t.outcome} | ` : ""}
         {t.market}
       </span>{" "}
-      {t.url && (
-        <span className="ml-2 text-cyan-300 underline decoration-dotted">
-          [View]
-        </span>
-      )}
+      {t.url && <span className="ml-2 text-cyan-300 underline decoration-dotted">[View]</span>}
     </div>
   );
 }
