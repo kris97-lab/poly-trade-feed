@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 
 // === Проверка на Mini App ===
-const isMiniApp = typeof window !== "undefined" && !!(window as any).farcaster;
+const isMiniApp = typeof window !== "undefined" && "farcaster" in window;
+
 const miniapp: {
   actions?: {
     ready?: () => Promise<void>;
@@ -18,7 +19,7 @@ const miniapp: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     }>;
   };
-} | null = isMiniApp ? (window as any).farcaster : null;
+} | null = isMiniApp ? (window as unknown as { farcaster: typeof miniapp }).farcaster : null;
 
 const safeNotify = async (options: { type: "success" | "error" | "info"; message: string }) => {
   if (miniapp?.actions?.notify) {
@@ -99,8 +100,8 @@ export default function MiniPage() {
         setWalletAddress(accounts[0]);
         await safeNotify({ type: "success", message: "Connected!" });
       }
-    } catch (error: any) {
-      if (error?.code === 4001) {
+    } catch (error) {
+      if ((error as { code?: number })?.code === 4001) {
         await safeNotify({ type: "info", message: "Cancelled" });
       } else {
         await safeNotify({ type: "error", message: "Failed" });
