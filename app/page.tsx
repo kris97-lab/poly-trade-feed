@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 
-// === Проверка на Mini App ===
+// === Farcaster Mini App Detection ===
 const isMiniApp = typeof window !== "undefined" && "farcaster" in window;
 
-const miniapp: {
+interface MiniAppSDK {
   actions?: {
     ready?: () => Promise<void>;
     notify?: (options: { type: "success" | "error" | "info"; message: string }) => Promise<void>;
@@ -19,7 +19,9 @@ const miniapp: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     }>;
   };
-} | null = isMiniApp ? (window as unknown as { farcaster: typeof miniapp }).farcaster : null;
+}
+
+const miniapp: MiniAppSDK | null = isMiniApp ? (window as any).farcaster : null;
 
 const safeNotify = async (options: { type: "success" | "error" | "info"; message: string }) => {
   if (miniapp?.actions?.notify) {
@@ -71,9 +73,7 @@ export default function MiniPage() {
       if (accounts?.length > 0) {
         setWalletAddress(accounts[0]);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   useEffect(() => {
