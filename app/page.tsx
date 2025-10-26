@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { sdk } from "@farcaster/miniapp-sdk";
+import { createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
 
 type Trade = {
   id: string;
@@ -17,39 +19,78 @@ type Trade = {
 
 const USD = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
+// Публичный клиент для проверки адреса (не обязателен, но полезен)
+const publicClient = createPublicClient({
+  chain: mainnet,
+  transport: http(),
+});
+
 export default function MiniPage() {
-  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [mountedFade, setMountedFade] = useState(false);
 
-  // Farcaster: hide splash as soon as app is ready to render
+  // === Farcaster: готовность приложения ===
   useEffect(() => {
     (async () => {
       try {
         await sdk.actions.ready();
       } catch {
-        // ignore – some environments might not support actions yet
+        // ignore
       }
       setTimeout(() => setMountedFade(true), 20);
     })();
   }, []);
 
-  // Connect wallet from START gate
-const connectWallet = async () => {
-  try {
-await sdk.actions.openUrl("farcaster://wallet");
-    setWalletConnected(true);
-  } catch {
-    // user cancelled or provider not available – remain on gate
-  }
-};
+  // === Проверка и восстановление подключения кошелька ===
+  const checkWallet = useCallback(async () => {
+    try {
+      const provider = sdk.wallet.getEthereumProvider();
+      if (!provider) return;
 
+      const accounts = await provider.request({ method: "eth_accounts" });
+      if (accounts && accounts.length > 0) {
+        setWalletAddress(accounts[0]);
+      }
+    } catch (error) {
+      console.error("Wallet check failed:", error);
+    }
+  }, []);
 
-  // Load trades only after wallet is connected
   useEffect(() => {
-    if (!walletConnected) return;
+    checkWallet();
+    const interval = setInterval(checkWallet, 3000); // авто-восстановление
+    return () => clearInterval(interval);
+  }, [checkWallet]);
+
+  // === Подключение кошелька ===
+  const connectWallet = async () => {
+    try {
+      const provider = sdk.wallet.getEthereumProvider();
+      if (!provider) {
+        await sdk.actions.notify({ type: "error", message: "Wallet not available" });
+        return;
+      }
+
+      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      if (accounts && accounts.length > 0) {
+        setWalletAddress(accounts[0]);
+        await sdk.actions.notify({ type: "success", message: "Wallet connected" });
+      }
+    } catch (error: any) {
+      if (error.code === 4001) {
+        await sdk.actions.notify({ type: "info", message: "Connection cancelled" });
+      } else {
+        await sdk.actions.notify({ type: "error", message: "Connection failed" });
+      }
+    }
+  };
+
+  // === Загрузка трейдов ===
+  useEffect(() => {
+    if (!walletAddress) return;
 
     let mounted = true;
 
@@ -68,7 +109,7 @@ await sdk.actions.openUrl("farcaster://wallet");
         setTrades(filtered);
         setUpdatedAt(new Date());
         setLoading(false);
-      } catch {
+      } catch (err) {
         if (mounted) setLoading(false);
       }
     };
@@ -79,10 +120,16 @@ await sdk.actions.openUrl("farcaster://wallet");
       mounted = false;
       clearInterval(id);
     };
-  }, [walletConnected]);
+  }, [walletAddress]);
 
-  // -------- GATE SCREEN (until wallet is connected) --------
-  if (!walletConnected) {
+  // === Кнопки по стандартам Mini Apps ===
+  const copyAddress = () => walletAddress && sdk.actions.copy(walletAddress);
+  const refresh = () => window.location.reload();
+  const closeApp = () => sdk.actions.close();
+  const openTrade = (url?: string) => url && sdk.actions.openUrl(url);
+
+  // === GATE SCREEN ===
+  if (!walletAddress) {
     return (
       <main
         className={`min-h-screen w-full flex items-center justify-center p-6 bg-[var(--bg)] transition-opacity duration-150 ${
@@ -109,30 +156,63 @@ await sdk.actions.openUrl("farcaster://wallet");
     );
   }
 
-  // -------- TERMINAL (after wallet is connected) --------
+  // === TERMINAL ===
   return (
     <main
-      className={`min-h-screen w-full flex items-center justify-center p-4 md:p-8 bg-[var(--bg)] transition-opacity duration-150 ${
+      className={`min-h-screen w-full flex flex-col p-4 md:p-8 bg-[var(--bg)] transition-opacity duration-150 ${
         mountedFade ? "opacity-100" : "opacity-0"
       }`}
     >
-      <div className="w-full max-w-4xl">
-        <div className="mx-auto max-w-3xl rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)]">
+      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+        <div className="rounded-[18px] border border-[var(--line)] bg-[var(--panel)] shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)] flex flex-col h-full">
           {/* Header */}
-          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)]">
-            <h2 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
-              Polymarket Trade Radar
-            </h2>
-            <div className="mt-1 text-[11px] text-[var(--muted)]">
-              {updatedAt ? `Updated: ${format(updatedAt, "HH:mm:ss")}` : "— — : — — : — —"}
+          <header className="px-4 py-4 border-b border-[var(--line)] bg-[var(--card)] flex justify-between items-start">
+            <div>
+              <h2 className="text-[20px] md:text-[22px] font-[var(--font-playfair)] text-[var(--ink)] tracking-wide leading-none">
+                Polymarket Trade Radar
+              </h2>
+              <div className="mt-1 text-[11px] text-[var(--muted)]">
+                {updatedAt ? `Updated: ${format(updatedAt, "HH:mm:ss")}` : "— — : — — : — —"}
+              </div>
             </div>
-            <div className="mt-1 text-[11px] text-emerald-300/80 font-mono">
-              [time] [side] [$notional | $price] | market [View]
+            <div className="flex gap-1">
+              <button
+                onClick={copyAddress}
+                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
+                title="Copy address"
+              >
+                Copy
+              </button>
+              <button
+                onClick={refresh}
+                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
+                title="Refresh"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={closeApp}
+                className="p-1.5 rounded border border-[var(--line)] bg-white/5 hover:bg-white/10 text-[10px] text-[var(--muted)]"
+                title="Close"
+              >
+                Close
+              </button>
             </div>
           </header>
 
+          {/* Wallet Info */}
+          <div className="px-4 py-2 text-[10px] text-[var(--muted)] border-b border-[var(--line)] bg-[var(--card)]">
+            Wallet: {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
+            <button
+              onClick={() => setWalletAddress(null)}
+              className="ml-2 text-red-400 hover:text-red-300"
+            >
+              [Disconnect]
+            </button>
+          </div>
+
           {/* Trades Feed */}
-          <div className="max-h-[70vh] overflow-auto bg-[var(--card)]">
+          <div className="flex-1 overflow-auto bg-[var(--card)] min-h-0">
             {loading ? (
               <SkeletonRows />
             ) : trades.length === 0 ? (
@@ -142,7 +222,7 @@ await sdk.actions.openUrl("farcaster://wallet");
             ) : (
               <div className="divide-y divide-[var(--line)]">
                 {trades.map((t) => (
-                  <Row key={t.id} t={t} />
+                  <Row key={t.id} t={t} onView={() => openTrade(t.url)} />
                 ))}
               </div>
             )}
@@ -153,21 +233,19 @@ await sdk.actions.openUrl("farcaster://wallet");
   );
 }
 
-function Row({ t }: { t: Trade }) {
+function Row({ t, onView }: { t: Trade; onView: () => void }) {
   const time = format(new Date(t.ts), "HH:mm:ss");
   const isHighBuy = t.side === "BUY" && t.amountUSD > 10_000;
 
-  // G2 FFT gold highlight for high-value BUYs
   const base =
-    "px-4 py-2 text-[13px] font-mono transition-colors duration-150 text-emerald-200/90";
-  const high =
-    "bg-[#6f5b1a]/25 ring-1 ring-[#6f5b1a]/30"; // мягкое золото, благородно
+    "px-4 py-2 text-[13px] font-mono transition-colors duration-150 text-emerald-200/90 cursor-pointer";
+  const high = "bg-[#6f5b1a]/25 ring-1 ring-[#6f5b1a]/30";
   const hover = "hover:bg-white/3";
 
   return (
-    <div className={`${base} ${isHighBuy ? high : hover}`}>
+    <div onClick={onView} className={`${base} ${isHighBuy ? high : hover}`}>
       <span className="inline-flex items-center">
-        {isHighBuy && <span className="text-yellow-300 mr-1">★</span>}
+        {isHighBuy && <span className="text-yellow-300 mr-1">Star</span>}
         <span className="text-emerald-300">[{time}]</span>
       </span>{" "}
       <span
@@ -187,14 +265,9 @@ function Row({ t }: { t: Trade }) {
         {t.market}
       </span>{" "}
       {t.url && (
-        <a
-          href={t.url}
-          target="_blank"
-          rel="noreferrer"
-          className="ml-2 text-cyan-300 underline decoration-dotted hover:brightness-125"
-        >
+        <span className="ml-2 text-cyan-300 underline decoration-dotted">
           [View]
-        </a>
+        </span>
       )}
     </div>
   );
