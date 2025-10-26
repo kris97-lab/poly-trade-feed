@@ -39,7 +39,7 @@ export default function MiniPage() {
   // Connect wallet from START gate
 const connectWallet = async () => {
   try {
-    await sdk.actions.openWallet();  // ✅ универсальный способ
+await sdk.actions.openUrl("farcaster://wallet");
     setWalletConnected(true);
   } catch {
     // user cancelled or provider not available – remain on gate
