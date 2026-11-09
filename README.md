@@ -2,7 +2,7 @@
 
 A live feed of large Polymarket trades (over $800), built as a Farcaster / Base mini app.
 
-**Live:** https://poly-trade-feed.vercel.app
+**Live:** https://poly-trade-feed.vercel.app (the feed opens inside a Farcaster client such as Warpcast; in a regular browser you see the entry screen). The raw feed works anywhere: https://poly-trade-feed.vercel.app/api/trades
 
 ## What it does
 
