@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 
+// Data API v2 trade (snake_case fields, wrapped in { data, pagination }).
 type RawTrade = {
-  transactionHash?: string;
-  conditionId?: string;
+  transaction_hash?: string;
+  condition_id?: string;
+  token_id?: string;
   timestamp: number;
   side: string;
   price?: number;
   size?: number;
   outcome?: string;
   title?: string;
-  asset?: string;
   slug?: string;
-  eventSlug?: string;
+  event_slug?: string;
 };
 
 type Trade = {
@@ -31,7 +32,7 @@ function tsToIso(t: number): string {
 }
 
 async function fetchPolymarketTrades(minUSD = 800, limit = 150): Promise<Trade[]> {
-  const u = new URL("https://data-api.polymarket.com/trades");
+  const u = new URL("https://data-api.polymarket.com/v2/trades");
   u.searchParams.set("limit", String(limit));
   u.searchParams.set("takerOnly", "true");
   u.searchParams.set("filterType", "CASH");
@@ -47,7 +48,7 @@ async function fetchPolymarketTrades(minUSD = 800, limit = 150): Promise<Trade[]
     throw new Error(`Polymarket API ${r.status} – ${text.slice(0, 200)}`);
   }
 
-  const raw = (await r.json()) as RawTrade[];
+  const raw = ((await r.json()) as { data?: RawTrade[] }).data ?? [];
 
   const mapped: Trade[] = raw.map((x) => {
     const price = typeof x.price === "number" ? x.price : undefined;
@@ -57,16 +58,16 @@ async function fetchPolymarketTrades(minUSD = 800, limit = 150): Promise<Trade[]
 
     let url: string | undefined = undefined;
     if (x.slug) url = `https://polymarket.com/market/${x.slug}`;
-    else if (x.eventSlug) url = `https://polymarket.com/event/${x.eventSlug}`;
+    else if (x.event_slug) url = `https://polymarket.com/event/${x.event_slug}`;
 
     return {
-      id: x.transactionHash || `${x.conditionId || "cond"}-${x.timestamp}`,
+      id: x.transaction_hash || `${x.condition_id || "cond"}-${x.timestamp}`,
       ts: tsToIso(Number(x.timestamp)),
       side: x.side.toUpperCase() === "BUY" ? "BUY" : "SELL",
       amountUSD: notional,
       price,
       outcome: x.outcome,
-      market: x.title || x.asset || "Unknown market",
+      market: x.title || x.token_id || "Unknown market",
       url,
     };
   });
